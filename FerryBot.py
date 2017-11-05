@@ -41,19 +41,25 @@ class FerryBot(telepot.Bot):
         
         if sender in id_a:
             if   command == '/ciao':
-                self.sendMessage(chat_id, 'Ciao Raf!')
+                self.sendMessage(chat_id, 'Ciao!')
+
             elif command == '/foto':
+                self.sendMessage(chat_id, "Adesso ti mando una foto")
+                self.DisplayOff()
+                # cancella immagine precedente
                 try:
                     os.remove('image.jpg')
                 except OSError:
                     pass
-                self.sendMessage(chat_id, "Adesso ti mando una foto")
                 self.camera.resolution = (1920, 1080)
                 self.camera.capture('image.jpg')
                 f = open('image.jpg', 'rb')
                 self.sendPhoto(chat_id, f)                
+
             elif command == '/video':
                 self.sendMessage(chat_id, "Faccio un filmato di 5 secondi. Attendi un attimo per il caricamento...")
+                self.DisplayOff()
+                # cancella video precedente
                 try:
                     os.remove('video.h264')
                 except OSError:

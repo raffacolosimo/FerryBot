@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=FERRYBOT
+Comment="Start FerryBot"
+Exec=/home/pi/Documents/FerryBot/GoFerryBot.sh
+Hidden=false
+NoDisplay=false
+Terminal=false
