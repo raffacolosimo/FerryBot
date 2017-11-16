@@ -21,18 +21,20 @@ class FerryBot(telepot.Bot):
         self.LEDscrollLeft = 0                   # numero di pixel rimasti da far scorrere
         self.FBotConfig = ConfigParser.ConfigParser()
         self.FBotConfig.read('FerryBot.ini')
-        nl = self.FBotConfig.get('TELEGRAM', 'id_a').split('\n') #stringa incolonnata con id Telegram autorizzati
-        self.id_a = [int(nl) for x in nl]                   # lista di id (come numeri) estratta dalla stringa precedente
+        nl = self.FBotConfig.get('TELEGRAM', 'id_a').split() # spezza in una lista la stringa incolonnata con id Telegram autorizzati
+        self.id_a = [int(x) for x in nl]                   # lista di id (come numeri) estratta dalla stringa precedente
         # Opzioni per la telecamera
-        if   self.FBotConfig.get('CAMERA', 'vflip').split() == 'True':
+        vflip = self.FBotConfig.get('CAMERA', 'vflip')
+        hflip = self.FBotConfig.get('CAMERA', 'hflip')
+        if   vflip == 'True':
             self.camera.vflip = True
-        elif self.FBotConfig.get('CAMERA', 'vflip').split() == 'False':
+        elif vflip == 'False':
             self.camera.vflip = False
         else:
             print 'errore nel file di configurazione per il parametro vflip'
-        if   self.FBotConfig.get('CAMERA', 'hflip').split() == 'True':
+        if   hflip == 'True':
             self.camera.hflip = True
-        elif self.FBotConfig.get('CAMERA', 'hflip').split() == 'False':
+        elif hflip == 'False':
             self.camera.hflip = False
         else:
             print 'errore nel file di configurazione per il parametro hflip'
@@ -42,9 +44,12 @@ class FerryBot(telepot.Bot):
         chat_id = msg['from']['id']
         user_name = "%s %s" % (msg['from']['first_name'], msg['from']['last_name'])
         completeCommand = msg['text']
-        commandParam = completeCommand.split('', 1) # separa comando ed eventuale argomento
+        commandParam = completeCommand.split(' ', 1) # separa comando ed eventuale argomento
         command = commandParam[0] # comando
-        param   = commandParam[1] # argomento
+        if len(commandParam)==2:
+            param   = commandParam[1] # argomento
+        else:
+            param =''
         self.request_count += 1
         sender = msg['from']['id']
 
@@ -96,12 +101,12 @@ class FerryBot(telepot.Bot):
 
             elif command == '/LED':
                 self.sendMessage(chat_id, "Scrivo il tuo messaggio sul display")
-                textMessage = param + "____"
+                textMessage = param 
                 self.LEDmessage(textMessage)
 
             else:
                 self.sendMessage(chat_id, "Scrivo il tuo messaggio sul display")
-                textMessage = completeCommand + "____"
+                textMessage = completeCommand 
                 self.LEDmessage(textMessage)
 
         else: # utente non nella lista degli autorizzati
@@ -145,7 +150,7 @@ class FerryBot(telepot.Bot):
         scrollphathd.set_brightness(0.5)
         scrollphathd.rotate(0)
         scrollphathd.clear()
-        BRIGHTNESS = 0.3
+        BRIGHTNESS = 0.7
         # prende il resto della divisione per 60 (= secondi) e lo convert nel campo 0.0-15.0
         seconds_progress = 15 * ((time.time() % 60) / 59.0) # ogni pixel sono 4 secondi
         # barra dei secondi a luminosita' variabile
@@ -185,7 +190,7 @@ class FerryBot(telepot.Bot):
         return
 
     def countdown(self):
-        scrollphathd.set_brightness(0.3)
+        scrollphathd.set_brightness(0.5)
         scrollphathd.rotate(0)
         # 3 - 2 - 1
         scrollphathd.clear()
@@ -246,6 +251,7 @@ class FerryBot(telepot.Bot):
         time.sleep(0.05)
         scrollphathd.clear()
         scrollphathd.show()
+        time.sleep(0.15)
         # scatta la foto
         self.camera.capture('image.jpg')
         return
@@ -301,7 +307,7 @@ class FerryBot(telepot.Bot):
         return
 
     def endrec(self):
-        scrollphathd.set_brightness(0.3)
+        scrollphathd.set_brightness(0.5)
         scrollphathd.rotate(0)
         scrollphathd.clear()
         scrollphathd.write_string('ok', x=3, y=0)
@@ -312,6 +318,7 @@ class FerryBot(telepot.Bot):
         scrollphathd.show()
         scrollphathd.scroll()
         return
+        
     def DisplayScrollOnce(self):
         if self.LEDscrollLeft > 0:
             self.LEDscrollLeft -= 1 # decrementa il contatore dei pixel rimasti da far scorrere
@@ -333,7 +340,7 @@ class FerryBot(telepot.Bot):
     def run(self):
         # gestisce le visualizzazioni
         while True:
-            time.sleep(0.05)
+            time.sleep(0.025)
             if bot.pulisciDisplay: # se e' richiesto lo spegnimento del display lo effettua
                 bot.DisplayOff()
                 bot.pulisciDisplay = False
