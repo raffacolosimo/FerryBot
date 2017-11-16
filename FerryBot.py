@@ -5,36 +5,52 @@ import picamera     # per la telecamera
 from subprocess import check_call, CalledProcessError # per la conversione MP4
 import scrollphathd # per il display scroll pHat HD
 from scrollphathd.fonts import font5x5, font5x7 # per i font del display
+import ConfigParser         # per gestione file di configurazione
 
-# lista ID telegram autorizzati
-id_a = [45170836,11111111,22222222] 
- 
+
 class FerryBot(telepot.Bot):
     def __init__(self, access_token): # il codice telegram e' passato come argomento
         telepot.Bot.__init__(self, access_token) # inizializza il bot
         self.camera = picamera.PiCamera()        # inizializza la camera
         self.listening_since = time.time()       # ora di inizio attivita' del bot
         self.request_count = 0                   # conteggio richeste
-        self.invalid_users_count = 0             # conteggio utenti non autorizzati 
+        self.invalid_users_count = 0             # conteggio utenti non autorizzati
         self.clockDisplay = False               # mostra l'orologio sul display
         self.textMessageDisplay = False         # mostra il messaggio di testo sul display
         self.pulisciDisplay = False             # spegne il display (cancella)
-        self.LEDscrollLeft = 0                   # numero di pixel rimasti da far scorrere 
-        # Eventuali opzioni per la telecamera
-        # self.camera.vflip = True
-        # self.camera.hflip = True
+        self.LEDscrollLeft = 0                   # numero di pixel rimasti da far scorrere
+        self.FBotConfig = ConfigParser.ConfigParser()
+        self.FBotConfig.read('FerryBot.ini')
+        nl = self.FBotConfig.get('TELEGRAM', 'id_a').split('\n') #stringa incolonnata con id Telegram autorizzati
+        self.id_a = [int(nl) for x in nl]                   # lista di id (come numeri) estratta dalla stringa precedente
+        # Opzioni per la telecamera
+        if   self.FBotConfig.get('CAMERA', 'vflip').split() == 'True':
+            self.camera.vflip = True
+        elif self.FBotConfig.get('CAMERA', 'vflip').split() == 'False':
+            self.camera.vflip = False
+        else:
+            print 'errore nel file di configurazione per il parametro vflip'
+        if   self.FBotConfig.get('CAMERA', 'hflip').split() == 'True':
+            self.camera.hflip = True
+        elif self.FBotConfig.get('CAMERA', 'hflip').split() == 'False':
+            self.camera.hflip = False
+        else:
+            print 'errore nel file di configurazione per il parametro hflip'
         return
 
     def handle(self, msg):         #gestisce i messaggi in arrivo
         chat_id = msg['from']['id']
         user_name = "%s %s" % (msg['from']['first_name'], msg['from']['last_name'])
-        command = msg['text']
+        completeCommand = msg['text']
+        commandParam = completeCommand.split('', 1) # separa comando ed eventuale argomento
+        command = commandParam[0] # comando
+        param   = commandParam[1] # argomento
         self.request_count += 1
         sender = msg['from']['id']
-     
+
         print 'Ricevuto un comando: %s' % command
-        
-        if sender in id_a:
+
+        if sender in self.id_a:
             if   command == '/ciao':
                 self.sendMessage(chat_id, 'Ciao!')
                 self.LEDmessage('ciao') # messaggio LED, non in loop
@@ -46,43 +62,23 @@ class FerryBot(telepot.Bot):
                 self.sendMessage(chat_id, "Fatto!")
                 self.sendMessage(chat_id, "Attendi un attimo per il caricamento...")
                 f = open('image.jpg', 'rb')
-                self.sendPhoto(chat_id, f)                
+                self.sendPhoto(chat_id, f)
 
             elif command == '/video':
                 self.sendMessage(chat_id, "Ora ti faccio un filmato di 5 secondi.")
                 self.sendMessage(chat_id, "Sei pronto? Guarda il display.")
-                self.DisplayOff()
-                # cancella video precedente
-                try:
-                    os.remove('video.h264')
-                except OSError:
-                    pass
-                try:
-                    os.remove('video.mp4')
-                except OSError:
-                    pass
-                    
-                self.camera.resolution = (1280, 720)
-                time.sleep(0.5)
-                self.countdown()
-                self.camera.start_recording('video.h264')
-                self.recblink()
-                #self.camera.wait_recording(5)
-                self.camera.stop_recording()
-                self.endrec()
-                time.sleep(1)
-                self.DisplayOff()
+                self.makeVideo()
                 self.sendMessage(chat_id, "Fatto!")
                 self.sendMessage(chat_id, "Attendi qualche secondo per il caricamento...")
-
+                # conversione MP4 e caricamento
                 cmd = ['MP4Box', '-add', 'video.h264', 'video.mp4']
                 try:
                     check_call(cmd)
-                    f = open('video.mp4', 'rb')                
+                    f = open('video.mp4', 'rb')
                     self.sendVideo(chat_id, f)
                 except CalledProcessError:
-                    self.sendMessage(chat_id, 'A problem occured!')                
-                
+                    self.sendMessage(chat_id, "C'e' stato un problema!")
+
             elif command == '/orologio':
                 self.sendMessage(chat_id, "Guarda l'orologio sul display")
                 self.clockDisplay = True
@@ -91,24 +87,29 @@ class FerryBot(telepot.Bot):
                 self.sendMessage(chat_id, "Spengo il display")
                 self.clockDisplay = False
                 self.pulisciDisplay = True
-                
+
             elif command == '/status':
                 durata = int(time.time() - self.listening_since)
                 self.sendMessage(chat_id, 'FerryBot in ascolto da %d secondi' % durata)
                 self.sendMessage(chat_id, 'Numero delle richieste gestite: %s' % self.request_count)
                 self.sendMessage(chat_id, 'Numero dei tentativi di utenti non autorizzati: %s' % self.invalid_users_count)
-                
+
+            elif command == '/LED':
+                self.sendMessage(chat_id, "Scrivo il tuo messaggio sul display")
+                textMessage = param + "____"
+                self.LEDmessage(textMessage)
+
             else:
                 self.sendMessage(chat_id, "Scrivo il tuo messaggio sul display")
-                textMessage = command + "____"
-                self.LCDmessage(textMessage)
-                
+                textMessage = completeCommand + "____"
+                self.LEDmessage(textMessage)
+
         else: # utente non nella lista degli autorizzati
             self.invalid_users_count += 1
             self.sendMessage(chat_id, 'Io non ti conosco!')
             self.sendMessage(chat_id, sender) # invia l'ID del chiamante per poterlo inserire fra gli utenti registrati
         return
-        
+
     def LEDmessage(self, txtMessage, loop=False):
         self.DisplayOff()
         scrollphathd.rotate(0)
@@ -125,7 +126,7 @@ class FerryBot(telepot.Bot):
             #print self.scrollphathd.get_buffer_shape()
         scrollphathd.show()
         self.clockDisplay = False
-            
+
 
     def clockVert(self):
         scrollphathd.set_brightness(0.3)
@@ -182,8 +183,8 @@ class FerryBot(telepot.Bot):
         # 1/10th of a second is accurate enough for a simple clock though :D
         scrollphathd.show()
         return
-        
-    def countdown(self):    
+
+    def countdown(self):
         scrollphathd.set_brightness(0.3)
         scrollphathd.rotate(0)
         # 3 - 2 - 1
@@ -210,7 +211,7 @@ class FerryBot(telepot.Bot):
         time.sleep(0.25)
         return
 
-    def takePhoto(self):    
+    def takePhoto(self):
         self.DisplayOff()
         scrollphathd.rotate(0)
         scrollphathd.set_brightness(0.25)
@@ -218,38 +219,75 @@ class FerryBot(telepot.Bot):
         scrollphathd.clear()
         scrollphathd.write_string('foto', x=18, y=0, font=font5x7)
         scrollphathd.show()
-        #print 'scritta foto'
         buffL=scrollphathd.get_buffer_shape()[0]
-        #print buffL
-        time.sleep(1)
+        time.sleep(0.5)
         for i in range(buffL+1):
             scrollphathd.show()
             scrollphathd.scroll()
-            time.sleep(0.020)
+            time.sleep(0.015)
         # cancella immagine precedente
         try:
             os.remove('image.jpg')
         except OSError:
             pass
         self.camera.resolution = (1920, 1080)
+        time.sleep(0.25)
         self.countdown()
-        # clic
+        # clic (piccolo flash)
         scrollphathd.clear()
         scrollphathd.set_brightness(0.7)
         scrollphathd.fill(1, x=0, y=0, width=17, height=7)
-        #scrollphathd.write_string('c', x=0, y=0)
-        #scrollphathd.write_string('l', x=5, y=0)
-        #scrollphathd.write_string('i', x=9, y=0)
+        #scrollphathd.write_string('c', x= 0, y=0)
+        #scrollphathd.write_string('l', x= 5, y=0)
+        #scrollphathd.write_string('i', x= 9, y=0)
         #scrollphathd.write_string('c', x=12, y=0)
         scrollphathd.show()
         #scatta la foto
-        time.sleep(0.01)
-        self.camera.capture('image.jpg')
+        time.sleep(0.05)
         scrollphathd.clear()
         scrollphathd.show()
+        # scatta la foto
+        self.camera.capture('image.jpg')
         return
 
-    def recblink(self):    
+    def makeVideo(self):
+        self.DisplayOff()
+        scrollphathd.rotate(0)
+        scrollphathd.set_brightness(0.25)
+        #scorre scritta video
+        scrollphathd.clear()
+        scrollphathd.write_string('video', x=18, y=0, font=font5x7)
+        scrollphathd.show()
+        buffL=scrollphathd.get_buffer_shape()[0]
+        time.sleep(0.5)
+        for i in range(buffL+1):
+            scrollphathd.show()
+            scrollphathd.scroll()
+            time.sleep(0.015)
+        # cancella video precedente
+        try:
+            os.remove('video.h264')
+        except OSError:
+            pass
+        try:
+            os.remove('video.mp4')
+        except OSError:
+            pass
+        self.camera.resolution = (1280, 720)
+        time.sleep(0.25)
+        self.countdown()
+        # registra
+        self.camera.start_recording('video.h264')
+        # lampeggia REC per 5 secondi
+        self.recblink()
+        # fine registrazine
+        self.camera.stop_recording()
+        # scrive ok
+        self.endrec()
+        time.sleep(1)
+        self.DisplayOff()
+
+    def recblink(self):
         scrollphathd.set_brightness(0.15)
         scrollphathd.rotate(0)
         for i in range(5):
@@ -293,7 +331,7 @@ class FerryBot(telepot.Bot):
         return
 
     def run(self):
-        # gestisce le visualizzazioni 
+        # gestisce le visualizzazioni
         while True:
             time.sleep(0.05)
             if bot.pulisciDisplay: # se e' richiesto lo spegnimento del display lo effettua
@@ -306,7 +344,7 @@ class FerryBot(telepot.Bot):
                 self.DisplayScrollLoop()
             elif self.LEDscrollLeft > 0: # se e' attivo lo scroll a singolo messaggio, lo effettua
                 self.DisplayScrollOnce()
-                
+
 #start the app/webserver
 if __name__ == "__main__":
     bot = FerryBot('407932832:AAHQhAfKV7oIVIcGQ_L4Q0H_iLT4NV0WLx8')
